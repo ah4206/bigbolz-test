@@ -1,0 +1,523 @@
+﻿// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MasterBruce7
+
+//@version=6
+indicator("BIGBOLZ+v6", overlay=true, max_labels_count=500, max_boxes_count=500, max_bars_back=500)
+
+length = input.int(11, 'Swing Lookback', minval=3)
+showBull = input.int(3, 'Show Last Bullish OB', minval=0)
+showBear = input.int(3, 'Show Last Bearish OB', minval=0)
+useBody = input(true, 'Use Candle Body')
+
+// Customizable inputs
+cooldownBars = input.int(15, 'Cooldown Period (bars)', minval=1, group='Signals')
+invalidationWindow = input.int(5, 'Invalidation Window (bars)', minval=1, group='Signals')
+
+// Risky Settings
+enable_risky = input.bool(true, 'Enable Risky Labels', group='Risky Settings')
+risky_threshold = input.int(2, 'Risky Threshold (signals)', minval=2, group='Risky Settings')
+risky_period = input.int(20, 'Risky Period (bars)', minval=1, group='Risky Settings')
+
+// Anti-Spam Settings
+enable_anti_spam = input.bool(true, 'Enable Anti-Spam', group='Anti-Spam Settings')
+spam_threshold = input.int(3, 'Spam Threshold (signals)', minval=2, group='Anti-Spam Settings')
+spam_detection_window = input.int(15, 'Detection Window (bars)', minval=1, group='Anti-Spam Settings')
+anti_spam_cooldown = input.int(20, 'Cooldown Period (bars)', minval=1, group='Anti-Spam Settings')
+
+// Strong Label Settings
+enable_strong = input.bool(true, 'Enable Strong Labels', group='Strong Labels')
+strong_threshold_pct = input.float(15, 'Strong Threshold (%)', minval=0.1, step=0.1, group='Strong Labels')
+
+// Strong Long Labels
+showStrongLongLabels = input.bool(true, 'Show Strong Long Labels', group='Strong Labels')
+strongLongLabelText = input.string("Strong Long", 'Strong Long Label Text', group='Strong Labels')
+strongLongLabelFillColor = input.color(color.new(color.green, 0), "Strong Long Fill", group='Strong Labels')
+strongLongLabelTextColor = input.color(color.white, "Strong Long Text", group='Strong Labels')
+strongLongLabelStyle = input.string("label_up", "Strong Long Style", options=["label_up","label_down","label_left","label_right"], group='Strong Labels')
+strongLongLabelSize = input.string("tiny", "Strong Long Size", options=["tiny","small","normal","large","huge"], group='Strong Labels')
+strongLongLabelYOffset = input.float(0, "Strong Long Y Offset", minval=-10, maxval=10, step=0.1, group='Strong Labels')
+
+// Strong Short Labels
+showStrongShortLabels = input.bool(true, 'Show Strong Short Labels', group='Strong Labels')
+strongShortLabelText = input.string("Strong Short", 'Strong Short Label Text', group='Strong Labels')
+strongShortLabelFillColor = input.color(color.new(color.red, 0), "Strong Short Fill", group='Strong Labels')
+strongShortLabelTextColor = input.color(color.white, "Strong Short Text", group='Strong Labels')
+strongShortLabelStyle = input.string("label_down", "Strong Short Style", options=["label_up","label_down","label_left","label_right"], group='Strong Labels')
+strongShortLabelSize = input.string("tiny", "Strong Short Size", options=["tiny","small","normal","large","huge"], group='Strong Labels')
+strongShortLabelYOffset = input.float(0, "Strong Short Y Offset", minval=-10, maxval=10, step=0.1, group='Strong Labels')
+
+bullCss = input.color(color.new(#00ff4a, 80), 'Bullish OB', inline='bullcss', group='Style')
+bullBreakCss = input.color(color.new(#ff0000, 75), 'Bullish Break', inline='bullcss', group='Style')
+bearCss = input.color(color.new(#ff0000, 75), 'Bearish OB', inline='bearcss', group='Style')
+bearBreakCss = input.color(color.new(#00ff4a, 80), 'Bearish Break', inline='bearcss', group='Style')
+
+// Long Labels
+showLongLabels = input.bool(true, 'Show Long Labels', group='Labels')
+longLabelText = input.string("Long", 'Long Label Text', group='Labels')
+longLabelFillColor = input.color(color.green, "Long Fill", group='Labels')
+longLabelTextColor = input.color(color.white, "Long Text", group='Labels')
+longLabelStyle = input.string("label_up", "Long Style", options=["label_up","label_down","label_left","label_right"], group='Labels')
+longLabelSize = input.string("tiny", "Long Size", options=["tiny","small","normal","large","huge"], group='Labels')
+longLabelYOffset = input.float(0, "Long Y Offset", minval=-10, maxval=10, step=0.1, group='Labels')
+
+// Short Labels
+showShortLabels = input.bool(true, 'Show Short Labels', group='Labels')
+shortLabelText = input.string("Short", 'Short Label Text', group='Labels')
+shortLabelFillColor = input.color(color.red, "Short Fill", group='Labels')
+shortLabelTextColor = input.color(color.white, "Short Text", group='Labels')
+shortLabelStyle = input.string("label_down", "Short Style", options=["label_up","label_down","label_left","label_right"], group='Labels')
+shortLabelSize = input.string("tiny", "Short Size", options=["tiny","small","normal","large","huge"], group='Labels')
+shortLabelYOffset = input.float(0, "Short Y Offset", minval=-10, maxval=10, step=0.1, group='Labels')
+
+// Risky Long Labels
+showRiskyLongLabels = input.bool(true, 'Show Risky Long Labels', group='Risky Labels')
+riskyLongLabelText = input.string("Risky Long", 'Risky Long Label Text', group='Risky Labels')
+riskyLongLabelFillColor = input.color(color.new(color.yellow, 20), "Risky Long Fill", group='Risky Labels')
+riskyLongLabelTextColor = input.color(color.black, "Risky Long Text", group='Risky Labels')
+riskyLongLabelStyle = input.string("label_up", "Risky Long Style", options=["label_up","label_down","label_left","label_right"], group='Risky Labels')
+riskyLongLabelSize = input.string("tiny", "Risky Long Size", options=["tiny","small","normal","large","huge"], group='Risky Labels')
+riskyLongLabelYOffset = input.float(0, "Risky Long Y Offset", minval=-10, maxval=10, step=0.1, group='Risky Labels')
+
+// Risky Short Labels
+showRiskyShortLabels = input.bool(true, 'Show Risky Short Labels', group='Risky Labels')
+riskyShortLabelText = input.string("Risky Short", 'Risky Short Label Text', group='Risky Labels')
+riskyShortLabelFillColor = input.color(color.new(color.yellow, 20), "Risky Short Fill", group='Risky Labels')
+riskyShortLabelTextColor = input.color(color.black, "Risky Short Text", group='Risky Labels')
+riskyShortLabelStyle = input.string("label_down", "Risky Short Style", options=["label_up","label_down","label_left","label_right"], group='Risky Labels')
+riskyShortLabelSize = input.string("tiny", "Risky Short Size", options=["tiny","small","normal","large","huge"], group='Risky Labels')
+riskyShortLabelYOffset = input.float(0, "Risky Short Y Offset", minval=-10, maxval=10, step=0.1, group='Risky Labels')
+
+// Invalid Labels
+showInvalidLabels = input.bool(true, 'Show Invalid Labels', group='Labels')
+invalidLabelText = input.string("X", 'Invalid Label Text', group='Labels')
+invalidLabelFillColor = input.color(color.gray, "Invalidated Fill", group='Labels')
+invalidLabelTextColor = input.color(color.black, "Invalidated Text", group='Labels')
+invalidLabelStyle = input.string("label_left", "Invalidated Style", options=["label_up","label_down","label_left","label_right"], group='Labels')
+invalidLabelSize = input.string("tiny", "Invalidated Size", options=["tiny","small","normal","large","huge"], group='Labels')
+invalidLabelYOffset = input.float(0.0, "Invalidated Y Offset", minval=-10, maxval=10, step=0.1, group='Labels')
+
+atr14 = ta.atr(14)
+
+max_hist = 500
+safe_length_long = math.min(bar_index, max_hist)
+safe_length_short = math.min(bar_index, max_hist)
+hist_high = ta.highest(high[1], safe_length_long)
+hist_low = ta.lowest(low[1], safe_length_short)
+
+type ob
+    float top = na
+    float btm = na
+    int loc = na
+    bool breaker = false
+    int break_loc = na
+    int break_bar = na
+    int last_signal_bar = na
+    float ref_extreme = na
+    int cooling_end_bar = na
+    bool invalidated = false
+    label signal_label_id = na
+    bool invalidation_marker_placed = false
+    int signal_count_risky = 0
+    int third_signal_bar = na
+    int cycle_start_bar = na
+    int cycle_signal_count = 0
+    int cooldown_end_bar = na
+    int last_sig_bar_for_strong = na
+    bool last_sig_is_long_for_strong = false
+    float last_sig_anchor_extreme = na
+    bool current_strong = false
+
+type swing
+    float y = na
+    int x = na
+    bool crossed = false
+
+swings(len) =>
+    var os = 0
+    var swing top = swing.new(na, na)
+    var swing btm = swing.new(na, na)
+    upper = ta.highest(len)
+    lower = ta.lowest(len)
+    os := high[len] > upper ? 0 : low[len] < lower ? 1 : os
+    if os == 0 and os[1] != 0
+        top := swing.new(high[len], bar_index[len])
+    if os == 1 and os[1] != 1
+        btm := swing.new(low[len], bar_index[len])
+    [top, btm]
+
+method notransp(color css) => color.rgb(color.r(css), color.g(css), color.b(css))
+
+method display(ob id, color css, color break_css) =>
+    if id.breaker
+        box.new(id.loc, id.top, id.break_loc, id.btm, css.notransp(), bgcolor=css, xloc=xloc.bar_time)
+        box.new(id.break_loc, id.top, time + 1, id.btm, na, bgcolor=break_css, extend=extend.right, xloc=xloc.bar_time)
+        line.new(id.loc, id.top, id.break_loc, id.top, xloc.bar_time, color=css.notransp())
+        line.new(id.loc, id.btm, id.break_loc, id.btm, xloc.bar_time, color=css.notransp())
+        line.new(id.break_loc, id.top, time + 1, id.top, xloc.bar_time, extend=extend.right, color=break_css.notransp(), style=line.style_dashed)
+        line.new(id.break_loc, id.btm, time + 1, id.btm, xloc.bar_time, extend=extend.right, color=break_css.notransp(), style=line.style_dashed)
+    else
+        box.new(id.loc, id.top, time, id.btm, na, bgcolor=css, extend=extend.right, xloc=xloc.bar_time)
+        line.new(id.loc, id.top, time, id.top, xloc.bar_time, extend=extend.right, color=css.notransp())
+        line.new(id.loc, id.btm, time, id.btm, xloc.bar_time, extend=extend.right, color=css.notransp())
+
+touches_ob(ob obj) =>
+    price_overlap = (high >= obj.btm and low <= obj.top) or (close >= obj.btm and close <= obj.top)
+    time_valid = not obj.breaker or (not na(obj.break_bar) and bar_index > obj.break_bar)
+    price_overlap and time_valid
+
+mapLabelStyle(style) =>
+    style == "label_up" ? label.style_label_up : style == "label_down" ? label.style_label_down : style == "label_left" ? label.style_label_left : label.style_label_right
+
+mapLabelSize(size) =>
+    size == "tiny" ? size.tiny : size == "small" ? size.small : size == "large" ? size.large : size == "huge" ? size.huge : size.normal
+
+build_label_text(is_long, is_risky, is_strong) =>
+    if is_strong and is_risky
+        is_long ? "Risky Strong Long" : "Risky Strong Short"
+    else if is_risky
+        is_long ? riskyLongLabelText : riskyShortLabelText
+    else if is_strong
+        is_long ? strongLongLabelText : strongShortLabelText
+    else
+        is_long ? longLabelText : shortLabelText
+
+plot_signal(is_long, is_risky, is_strong, sig_bar, y_pos) =>
+    string lbl_text = na
+    color fill = na
+    color txt_col = na
+    string style_str = na
+    string size_str = na
+    float y_offset = na
+
+    text_to_use = build_label_text(is_long, is_risky, is_strong)
+
+    if is_strong and is_risky
+        if is_long
+            if showRiskyLongLabels and enable_risky
+                lbl_text := text_to_use
+                fill := riskyLongLabelFillColor
+                txt_col := riskyLongLabelTextColor
+                style_str := riskyLongLabelStyle
+                size_str := riskyLongLabelSize
+                y_offset := riskyLongLabelYOffset
+        else
+            if showRiskyShortLabels and enable_risky
+                lbl_text := text_to_use
+                fill := riskyShortLabelFillColor
+                txt_col := riskyShortLabelTextColor
+                style_str := riskyShortLabelStyle
+                size_str := riskyShortLabelSize
+                y_offset := riskyShortLabelYOffset
+    else if is_strong
+        if is_long
+            if showStrongLongLabels and enable_strong
+                lbl_text := text_to_use
+                fill := strongLongLabelFillColor
+                txt_col := strongLongLabelTextColor
+                style_str := strongLongLabelStyle
+                size_str := strongLongLabelSize
+                y_offset := strongLongLabelYOffset
+        else
+            if showStrongShortLabels and enable_strong
+                lbl_text := text_to_use
+                fill := strongShortLabelFillColor
+                txt_col := strongShortLabelTextColor
+                style_str := strongShortLabelStyle
+                size_str := strongShortLabelSize
+                y_offset := strongShortLabelYOffset
+    else if is_risky
+        if is_long
+            if showRiskyLongLabels and enable_risky
+                lbl_text := text_to_use
+                fill := riskyLongLabelFillColor
+                txt_col := riskyLongLabelTextColor
+                style_str := riskyLongLabelStyle
+                size_str := riskyLongLabelSize
+                y_offset := riskyLongLabelYOffset
+        else
+            if showRiskyShortLabels and enable_risky
+                lbl_text := text_to_use
+                fill := riskyShortLabelFillColor
+                txt_col := riskyShortLabelTextColor
+                style_str := riskyShortLabelStyle
+                size_str := riskyShortLabelSize
+                y_offset := riskyShortLabelYOffset
+    else
+        if is_long
+            if showLongLabels
+                lbl_text := text_to_use
+                fill := longLabelFillColor
+                txt_col := longLabelTextColor
+                style_str := longLabelStyle
+                size_str := longLabelSize
+                y_offset := longLabelYOffset
+        else
+            if showShortLabels
+                lbl_text := text_to_use
+                fill := shortLabelFillColor
+                txt_col := shortLabelTextColor
+                style_str := shortLabelStyle
+                size_str := shortLabelSize
+                y_offset := shortLabelYOffset
+
+    if not na(lbl_text)
+        style = mapLabelStyle(style_str)
+        lbl_size = mapLabelSize(size_str)
+        label.new(sig_bar, y_pos + y_offset, lbl_text, color=fill, style=style, textcolor=txt_col, size=lbl_size)
+
+invalidate_signal(ob obj, bool is_long, int signal_bar) =>
+    if not na(obj.signal_label_id)
+        label.set_color(obj.signal_label_id, invalidLabelFillColor)
+    if showInvalidLabels and not obj.invalidation_marker_placed
+        style = mapLabelStyle(invalidLabelStyle)
+        lbl_size = mapLabelSize(invalidLabelSize)
+        y_offset = invalidLabelYOffset
+        offset = bar_index - signal_bar
+        marker_y = is_long ? low[offset] - (atr14 * 0.1) + y_offset : high[offset] + (atr14 * 0.1) + y_offset
+        label.new(signal_bar, marker_y, invalidLabelText, color=invalidLabelFillColor, style=style, textcolor=invalidLabelTextColor, size=lbl_size)
+        obj.invalidation_marker_placed := true
+
+n = bar_index
+[top, btm] = swings(length)
+
+var bullish_ob = array.new<ob>(0)
+var bearish_ob = array.new<ob>(0)
+
+calc_is_strong(ob o, bool eval_is_long, int eval_sig_bar, float prior_anchor) =>
+    strong = false
+    if enable_strong and not na(o.last_sig_bar_for_strong) and o.last_sig_is_long_for_strong == eval_is_long and o.last_sig_bar_for_strong < eval_sig_bar
+        run_length = bar_index - o.last_sig_bar_for_strong - 1
+        effective_length = math.min(run_length, max_hist)
+        if effective_length > 0 and prior_anchor > 0
+            float inter_extreme = na
+            if eval_is_long
+                if effective_length <= safe_length_long
+                    inter_extreme := ta.highest(high[1], effective_length)
+                strong := not na(inter_extreme) and ((inter_extreme - prior_anchor) / prior_anchor) * 100.0 >= strong_threshold_pct
+            else
+                if effective_length <= safe_length_short
+                    inter_extreme := ta.lowest(low[1], effective_length)
+                strong := not na(inter_extreme) and ((prior_anchor - inter_extreme) / prior_anchor) * 100.0 >= strong_threshold_pct
+    strong
+
+reset_strong_anchor(ob o, bool new_is_long, int new_sig_bar, float new_low, float new_high) =>
+    o.last_sig_bar_for_strong := new_sig_bar
+    o.last_sig_is_long_for_strong := new_is_long
+    o.last_sig_anchor_extreme := new_is_long ? new_low : new_high
+    o.current_strong := false
+
+// YOUR ORIGINAL SIGNAL CODE (UNCHANGED)
+if array.size(bullish_ob) > 0
+    for i = 0 to math.min(showBull - 1, array.size(bullish_ob) - 1)
+        obj = array.get(bullish_ob, i)
+        obj.current_strong := calc_is_strong(obj, not obj.breaker, bar_index, obj.last_sig_anchor_extreme)
+if array.size(bearish_ob) > 0
+    for i = 0 to math.min(showBear - 1, array.size(bearish_ob) - 1)
+        obj = array.get(bearish_ob, i)
+        obj.current_strong := calc_is_strong(obj, obj.breaker, bar_index, obj.last_sig_anchor_extreme)
+
+if barstate.islast or barstate.isconfirmed
+    if showBull > 0 and array.size(bullish_ob) > 0
+        for i = 0 to math.min(showBull - 1, array.size(bullish_ob) - 1)
+            obj = array.get(bullish_ob, i)
+            is_long = not obj.breaker
+            touch = touches_ob(obj) and not obj.invalidated
+            if touch
+                in_cooling = not na(obj.cooling_end_bar) and bar_index <= obj.cooling_end_bar
+                ref_breached = not na(obj.ref_extreme) and (is_long ? low < obj.ref_extreme : high > obj.ref_extreme)
+                if not in_cooling or ref_breached
+                    bool can_signal = true
+                    if enable_anti_spam
+                        if not na(obj.cooldown_end_bar) and bar_index <= obj.cooldown_end_bar
+                            can_signal := false
+                        else
+                            if na(obj.cycle_start_bar) or bar_index - obj.cycle_start_bar > spam_detection_window
+                                obj.cycle_start_bar := bar_index
+                                obj.cycle_signal_count := 1
+                            else
+                                obj.cycle_signal_count += 1
+                            if obj.cycle_signal_count >= spam_threshold and bar_index - obj.cycle_start_bar <= spam_detection_window
+                                obj.cooldown_end_bar := bar_index + anti_spam_cooldown
+                    if can_signal
+                        bool is_risky = false
+                        if enable_risky
+                            if not na(obj.third_signal_bar) and bar_index - obj.third_signal_bar > risky_period
+                                obj.signal_count_risky := 0
+                                obj.third_signal_bar := na
+                            obj.signal_count_risky += 1
+                            if obj.signal_count_risky == risky_threshold
+                                obj.third_signal_bar := bar_index
+                            is_risky := obj.signal_count_risky > risky_threshold and not na(obj.third_signal_bar) and bar_index - obj.third_signal_bar <= risky_period
+                        obj.last_signal_bar := bar_index
+                        obj.ref_extreme := is_long ? low : high
+                        obj.cooling_end_bar := bar_index + cooldownBars
+                        obj.invalidated := false
+                        obj.invalidation_marker_placed := false
+
+                        new_is_long = is_long
+                        new_is_strong = obj.current_strong
+
+                        obj.signal_label_id := plot_signal(new_is_long, is_risky, new_is_strong, bar_index, new_is_long ? low : high)
+                        string alert_msg = (new_is_strong and is_risky) ? (new_is_long ? "Risky Strong Long Signal" : "Risky Strong Short Signal") :
+                                           new_is_strong ? (new_is_long ? "Strong Long Signal" : "Strong Short Signal") :
+                                           is_risky ? (new_is_long ? "Risky Long Signal" : "Risky Short Signal") :
+                                           (new_is_long ? "Long Signal" : "Short Signal")
+                        alert(alert_msg, alert.freq_once_per_bar)
+
+                        reset_strong_anchor(obj, new_is_long, bar_index, low, high)
+            if barstate.isconfirmed and not na(obj.last_signal_bar) and not obj.invalidated
+                window_start = obj.last_signal_bar
+                window_end = window_start + invalidationWindow
+                if bar_index >= window_start and bar_index <= window_end
+                    inval_cond = is_long ? close < obj.btm : close > obj.top
+                    if inval_cond
+                        invalidate_signal(obj, is_long, obj.last_signal_bar)
+                        if enable_risky
+                            obj.signal_count_risky := 0
+                            obj.third_signal_bar := na
+                        if enable_anti_spam
+                            obj.cycle_start_bar := na
+                            obj.cycle_signal_count := 0
+                            obj.cooldown_end_bar := na
+                        obj.invalidated := true
+
+    if showBear > 0 and array.size(bearish_ob) > 0
+        for i = 0 to math.min(showBear - 1, array.size(bearish_ob) - 1)
+            obj = array.get(bearish_ob, i)
+            is_long = obj.breaker
+            touch = touches_ob(obj) and not obj.invalidated
+            if touch
+                in_cooling = not na(obj.cooling_end_bar) and bar_index <= obj.cooling_end_bar
+                ref_breached = not na(obj.ref_extreme) and (is_long ? low < obj.ref_extreme : high > obj.ref_extreme)
+                if not in_cooling or ref_breached
+                    bool can_signal = true
+                    if enable_anti_spam
+                        if not na(obj.cooldown_end_bar) and bar_index <= obj.cooldown_end_bar
+                            can_signal := false
+                        else
+                            if na(obj.cycle_start_bar) or bar_index - obj.cycle_start_bar > spam_detection_window
+                                obj.cycle_start_bar := bar_index
+                                obj.cycle_signal_count := 1
+                            else
+                                obj.cycle_signal_count += 1
+                            if obj.cycle_signal_count >= spam_threshold and bar_index - obj.cycle_start_bar <= spam_detection_window
+                                obj.cooldown_end_bar := bar_index + anti_spam_cooldown
+                    if can_signal
+                        bool is_risky = false
+                        if enable_risky
+                            if not na(obj.third_signal_bar) and bar_index - obj.third_signal_bar > risky_period
+                                obj.signal_count_risky := 0
+                                obj.third_signal_bar := na
+                            obj.signal_count_risky += 1
+                            if obj.signal_count_risky == risky_threshold
+                                obj.third_signal_bar := bar_index
+                            is_risky := obj.signal_count_risky > risky_threshold and not na(obj.third_signal_bar) and bar_index - obj.third_signal_bar <= risky_period
+                        obj.last_signal_bar := bar_index
+                        obj.ref_extreme := is_long ? low : high
+                        obj.cooling_end_bar := bar_index + cooldownBars
+                        obj.invalidated := false
+                        obj.invalidation_marker_placed := false
+
+                        new_is_long = is_long
+                        new_is_strong = obj.current_strong
+
+                        obj.signal_label_id := plot_signal(new_is_long, is_risky, new_is_strong, bar_index, new_is_long ? low : high)
+                        string alert_msg = (new_is_strong and is_risky) ? (new_is_long ? "Risky Strong Long Signal" : "Risky Strong Short Signal") :
+                                           new_is_strong ? (new_is_long ? "Strong Long Signal" : "Strong Short Signal") :
+                                           is_risky ? (new_is_long ? "Risky Long Signal" : "Risky Short Signal") :
+                                           (new_is_long ? "Long Signal" : "Short Signal")
+                        alert(alert_msg, alert.freq_once_per_bar)
+
+                        reset_strong_anchor(obj, new_is_long, bar_index, low, high)
+            if barstate.isconfirmed and not na(obj.last_signal_bar) and not obj.invalidated
+                window_start = obj.last_signal_bar
+                window_end = window_start + invalidationWindow
+                if bar_index >= window_start and bar_index <= window_end
+                    inval_cond = is_long ? close < obj.btm : close > obj.top
+                    if inval_cond
+                        invalidate_signal(obj, is_long, obj.last_signal_bar)
+                        if enable_risky
+                            obj.signal_count_risky := 0
+                            obj.third_signal_bar := na
+                        if enable_anti_spam
+                            obj.cycle_start_bar := na
+                            obj.cycle_signal_count := 0
+                            obj.cooldown_end_bar := na
+                        obj.invalidated := true
+
+// FIXED
+if barstate.isconfirmed
+    max = useBody ? math.max(close, open) : high
+    min = useBody ? math.min(close, open) : low
+
+    if close > top.y and not top.crossed
+        top.crossed := true
+        minima = max[1]
+        maxima = min[1]
+        loc = time[1]
+        for i = 1 to (n - top.x)-1
+            minima := math.min(min[i], minima)
+            maxima := minima == min[i] ? max[i] : maxima
+            loc := minima == min[i] ? time[i] : loc
+        bullish_ob.unshift(ob.new(maxima, minima, loc))
+        
+    if array.size(bullish_ob) > 0
+        for i = array.size(bullish_ob)-1 to 0
+            element = array.get(bullish_ob, i)
+            if not element.breaker 
+                if math.min(close, open) < element.btm
+                    new_breaker = ob.new(element.top, element.btm, element.loc)
+                    new_breaker.breaker := true
+                    new_breaker.break_loc := time
+                    new_breaker.break_bar := bar_index
+                    bullish_ob.unshift(new_breaker)
+                    array.remove(bullish_ob, i + 1)
+            else
+                if close > element.top
+                    array.remove(bullish_ob, i)
+
+    if close < btm.y and not btm.crossed
+        btm.crossed := true
+        maxima = min[1]
+        minima = max[1]
+        loc = time[1]
+        for i = 1 to (n - btm.x)-1
+            maxima := math.max(max[i], maxima)
+            minima := maxima == max[i] ? min[i] : minima
+            loc := maxima == max[i] ? time[i] : loc
+        bearish_ob.unshift(ob.new(maxima, minima, loc))
+        
+    if array.size(bearish_ob) > 0
+        for i = array.size(bearish_ob)-1 to 0
+            element = array.get(bearish_ob, i)
+            if not element.breaker 
+                if math.max(close, open) > element.top
+                    new_breaker = ob.new(element.top, element.btm, element.loc)
+                    new_breaker.breaker := true
+                    new_breaker.break_loc := time
+                    new_breaker.break_bar := bar_index
+                    bearish_ob.unshift(new_breaker)
+                    array.remove(bearish_ob, i + 1)
+            else
+                if close < element.btm
+                    array.remove(bearish_ob, i)
+
+if barstate.islast
+    box_size = array.size(box.all)
+    if box_size > 0
+        for i = box_size - 1 to 0
+            box.delete(array.get(box.all, i))
+    line_size = array.size(line.all)
+    if line_size > 0
+        for i = line_size - 1 to 0
+            line.delete(array.get(line.all, i))
+
+if barstate.islast
+    if showBull > 0 and array.size(bullish_ob) > 0
+        for i = 0 to math.min(showBull - 1, array.size(bullish_ob) - 1)
+            get_ob = array.get(bullish_ob, i)
+            get_ob.display(bullCss, bullBreakCss)
+    if showBear > 0 and array.size(bearish_ob) > 0
+        for i = 0 to math.min(showBear - 1, array.size(bearish_ob) - 1)
+            get_ob = array.get(bearish_ob, i)
+            get_ob.display(bearCss, bearBreakCss)
